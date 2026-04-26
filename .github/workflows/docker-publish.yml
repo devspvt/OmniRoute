@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      IMAGE_NAME: diegosouzapw/omniroute
+      IMAGE_NAME: gameplayer2507/omniroute
 
     steps:
       - name: Checkout
