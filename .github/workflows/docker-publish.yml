@@ -2,53 +2,45 @@ name: Publish to Docker Hub
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       version:
-        description: "Version tag to build (e.g. 2.6.0)"
+        description: "Version tag (e.g. 2.6.0)"
         required: true
         type: string
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   docker:
-    name: Build and Push Docker (multi-arch)
     runs-on: ubuntu-latest
+
     env:
       IMAGE_NAME: diegosouzapw/omniroute
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/v{0}', inputs.version) || '' }}
 
-      - name: Set up QEMU (for multi-arch builds)
-        uses: docker/setup-qemu-action@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract version from release tag or input
+      - name: Resolve version
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -58,10 +50,9 @@ jobs:
             VERSION="${VERSION#v}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Publishing Docker image: $IMAGE_NAME:$VERSION"
 
-      - name: Build and push multi-arch image
-        uses: docker/build-push-action@v7
+      - name: Build and push
+        uses: docker/build-push-action@v6
         with:
           context: .
           target: runner-base
@@ -70,23 +61,17 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.IMAGE_NAME }}:latest
-            ghcr.io/diegosouzapw/omniroute:${{ steps.version.outputs.version }}
-            ghcr.io/diegosouzapw/omniroute:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          no-cache: false
-        env:
-          DOCKER_BUILDKIT_INLINE_CACHE: 1
 
       - name: Inspect image
-        run: |
-          docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}"
+        run: docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}"
 
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v5
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
           repository: diegosouzapw/omniroute
-          short-description: "OmniRoute — Unified AI proxy. Route any LLM through one endpoint."
+          short-description: "OmniRoute — Unified AI proxy"
           readme-filepath: ./README.md
